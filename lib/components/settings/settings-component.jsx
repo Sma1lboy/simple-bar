@@ -2,6 +2,7 @@ import * as Uebersicht from "uebersicht";
 import * as Utils from "../../utils";
 import SettingsInner from "./settings-inner.jsx";
 import SettingsWidgets from "./settings-widgets.jsx";
+import ThemesSettings from "./themes-settings.jsx";
 import * as Settings from "../../settings";
 
 const { React } = Uebersicht;
@@ -101,6 +102,7 @@ export default function Component({ closeSettings }) {
             if (!setting || hideContent) return null;
 
             const isWidgetsTab = key === "widgets";
+            const isThemesTab = key === "themes";
 
             const { label } = setting;
             return (
@@ -114,6 +116,15 @@ export default function Component({ closeSettings }) {
                     newSettings={newSettings}
                     setNewSettings={setNewSettings}
                   />
+                ) : isThemesTab ? (
+                  <React.Fragment>
+                    <div className="settings__inner-title">{label}</div>
+                    <ThemesSettings
+                      setting={setting}
+                      newSettings={newSettings}
+                      setNewSettings={setNewSettings}
+                    />
+                  </React.Fragment>
                 ) : (
                   <React.Fragment>
                     <div className="settings__inner-title">{label}</div>
