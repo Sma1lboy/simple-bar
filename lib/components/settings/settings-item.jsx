@@ -28,6 +28,14 @@ export default function SettingsItem({
   onChange,
 }) {
   const onClick = (e) => Utils.clickEffect(e);
+  const textInputRef = React.useRef();
+
+  const onColorInputChange = (e) => {
+    onChange(e);
+    if (textInputRef.current) {
+      textInputRef.current.value = e.target.value;
+    }
+  };
   if (type === "component") {
     return <Component defaultValue={defaultValue} onChange={onChange} />;
   }
@@ -72,12 +80,21 @@ export default function SettingsItem({
       <React.Fragment>
         <label htmlFor={code} dangerouslySetInnerHTML={{ __html: label }} />
         {type === "color" && (
-          <div
-            className="settings__item-color-pill"
-            style={{ backgroundColor: defaultValue || "transparent" }}
-          />
+          <React.Fragment>
+            <input
+              type="color"
+              className="settings__item-color-picker"
+              value={defaultValue || "#000000"}
+              onChange={onColorInputChange}
+            />
+            <div
+              className="settings__item-color-pill"
+              style={{ backgroundColor: defaultValue || "transparent" }}
+            />
+          </React.Fragment>
         )}
         <input
+          ref={type === "color" ? textInputRef : undefined}
           id={code}
           type="text"
           defaultValue={defaultValue}
