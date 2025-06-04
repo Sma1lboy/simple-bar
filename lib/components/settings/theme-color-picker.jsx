@@ -10,43 +10,65 @@ export default function ThemeColorPicker({ value, onChange, placeholder }) {
   const [hsv, setHsv] = React.useState({ h: 0, s: 100, v: 100 });
   const [alpha, setAlpha] = React.useState(1);
   const [isDragging, setIsDragging] = React.useState(null);
+  const dragRef = React.useRef(null);
+  const saturationRef = React.useRef(null);
+  const hueRef = React.useRef(null);
+  const alphaRef = React.useRef(null);
 
   // Convert hex to HSV
   const hexToHsv = (hex) => {
     if (!hex || hex === "transparent") return { h: 0, s: 0, v: 100 };
-    
-    // Handle rgba() format
-    if (hex.startsWith('rgba')) {
-      const rgbaMatch = hex.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
-      if (rgbaMatch) {
-        const r = parseInt(rgbaMatch[1]) / 255;
-        const g = parseInt(rgbaMatch[2]) / 255;
-        const b = parseInt(rgbaMatch[3]) / 255;
-        const a = rgbaMatch[4] ? parseFloat(rgbaMatch[4]) : 1;
-        setAlpha(a);
+
+    // rgba() or rgb()
+    if (hex.startsWith("rgba")) {
+      const match = hex.match(/rgba?\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
+      if (match) {
+        const r = parseInt(match[1]) / 255;
+        const g = parseInt(match[2]) / 255;
+        const b = parseInt(match[3]) / 255;
+        setAlpha(parseFloat(match[4]));
         return rgbToHsv(r, g, b);
       }
-    }
-    
-    // Handle rgb() format
-    if (hex.startsWith('rgb')) {
-      const rgbMatch = hex.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-      if (rgbMatch) {
-        const r = parseInt(rgbMatch[1]) / 255;
-        const g = parseInt(rgbMatch[2]) / 255;
-        const b = parseInt(rgbMatch[3]) / 255;
+    } else if (hex.startsWith("rgb")) {
+      const match = hex.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+      if (match) {
+        const r = parseInt(match[1]) / 255;
+        const g = parseInt(match[2]) / 255;
+        const b = parseInt(match[3]) / 255;
         return rgbToHsv(r, g, b);
       }
+    } else if (hex.startsWith("hsla")) {
+      const match = hex.match(/hsla?\((\d+),\s*(\d+)%?,\s*(\d+)%?,\s*([\d.]+)\)/);
+      if (match) {
+        const [h, s, l, a] = match.slice(1).map(Number);
+        setAlpha(isNaN(a) ? 1 : a);
+        const [r, g, b] = hslToRgb(h, s, l);
+        return rgbToHsv(r / 255, g / 255, b / 255);
+      }
+    } else if (hex.startsWith("hsl")) {
+      const match = hex.match(/hsl\((\d+),\s*(\d+)%?,\s*(\d+)%?\)/);
+      if (match) {
+        const [h, s, l] = match.slice(1).map(Number);
+        const [r, g, b] = hslToRgb(h, s, l);
+        return rgbToHsv(r / 255, g / 255, b / 255);
+      }
     }
-    
-    // Handle hex format
-    hex = hex.replace('#', '');
+
+    // hex notation
+    hex = hex.replace('#', '').trim();
+    if (hex.length === 3 || hex.length === 4) {
+      hex = hex.split('').map((c) => c + c).join('');
+    }
+    if (hex.length === 8) {
+      const aHex = hex.slice(6, 8);
+      setAlpha(parseInt(aHex, 16) / 255);
+      hex = hex.slice(0, 6);
+    }
     if (hex.length !== 6) return { h: 0, s: 0, v: 100 };
-    
+
     const r = parseInt(hex.substr(0, 2), 16) / 255;
     const g = parseInt(hex.substr(2, 2), 16) / 255;
     const b = parseInt(hex.substr(4, 2), 16) / 255;
-    
     return rgbToHsv(r, g, b);
   };
 
@@ -69,6 +91,20 @@ export default function ThemeColorPicker({ value, onChange, placeholder }) {
     const v = Math.round(max * 100);
     
     return { h: isNaN(h) ? 0 : h, s: isNaN(s) ? 0 : s, v: isNaN(v) ? 0 : v };
+  };
+
+  // Convert HSL to RGB
+  const hslToRgb = (h, s, l) => {
+    h = h % 360;
+    s = Math.max(0, Math.min(100, s)) / 100;
+    l = Math.max(0, Math.min(100, l)) / 100;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n) => {
+      const k = (n + h / 30) % 12;
+      const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+      return Math.round(color * 255);
+    };
+    return [f(0), f(8), f(4)];
   };
 
   // Convert HSV to hex
@@ -159,8 +195,8 @@ export default function ThemeColorPicker({ value, onChange, placeholder }) {
   const handleMouseDown = React.useCallback((type) => (e) => {
     e.preventDefault();
     setIsDragging(type);
-    
-    // Handle the initial click
+    dragRef.current = e.currentTarget;
+
     if (type === 'saturation') {
       handleSaturationBrightness(e);
     } else if (type === 'hue') {
@@ -171,31 +207,18 @@ export default function ThemeColorPicker({ value, onChange, placeholder }) {
   }, [handleSaturationBrightness, handleHue, handleAlpha]);
 
   const handleMouseMove = React.useCallback((e) => {
-    if (!isDragging) return;
-    
+    if (!isDragging || !dragRef.current) return;
+
     e.preventDefault();
-    
-    // Find the correct target element for each drag type
-    let targetElement;
-    if (isDragging === 'saturation') {
-      targetElement = document.querySelector('.theme-color-picker__saturation');
-    } else if (isDragging === 'hue') {
-      targetElement = document.querySelector('.theme-color-picker__hue');
-    } else if (isDragging === 'alpha') {
-      targetElement = document.querySelector('.theme-color-picker__alpha');
-    }
-    
-    if (!targetElement) return;
-    
-    // Create a synthetic event with the correct target
+
     const syntheticEvent = {
       ...e,
-      currentTarget: targetElement,
+      currentTarget: dragRef.current,
       clientX: e.clientX,
       clientY: e.clientY,
       preventDefault: () => e.preventDefault()
     };
-    
+
     if (isDragging === 'saturation') {
       handleSaturationBrightness(syntheticEvent);
     } else if (isDragging === 'hue') {
@@ -208,6 +231,7 @@ export default function ThemeColorPicker({ value, onChange, placeholder }) {
   const handleMouseUp = React.useCallback((e) => {
     e.preventDefault();
     setIsDragging(null);
+    dragRef.current = null;
   }, []);
 
   // Add global mouse events when dragging
@@ -229,18 +253,36 @@ export default function ThemeColorPicker({ value, onChange, placeholder }) {
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
+  // Close picker with Escape key
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isOpen]);
+
   const currentColor = hsvToHex(hsv.h, hsv.s, hsv.v, alpha);
   const hueColor = hsvToHex(hsv.h, 100, 100);
 
   // Simplified and reliable transparency detection
   const isTransparent = (colorValue) => {
     if (!colorValue) return false;
+    if (colorValue === 'transparent') return true;
     if (colorValue.startsWith('rgba')) {
-      // Extract alpha value from rgba(r,g,b,a)
-      const alphaMatch = colorValue.match(/,\s*([\d.]+)\s*\)$/);
-      if (alphaMatch) {
-        const alpha = parseFloat(alphaMatch[1]);
-        return !isNaN(alpha) && alpha < 1;
+      const match = colorValue.match(/,\s*([\d.]+)\s*\)$/);
+      if (match) {
+        const a = parseFloat(match[1]);
+        return !isNaN(a) && a < 1;
+      }
+    }
+    if (colorValue.startsWith('#')) {
+      const hex = colorValue.slice(1);
+      if (hex.length === 4 || hex.length === 8) {
+        const aHex = hex.length === 4 ? hex[3] + hex[3] : hex.slice(6, 8);
+        const a = parseInt(aHex, 16) / 255;
+        return a < 1;
       }
     }
     return false;
@@ -309,8 +351,9 @@ export default function ThemeColorPicker({ value, onChange, placeholder }) {
             </div>
             
             {/* Main saturation/brightness area */}
-            <div 
+            <div
               className="theme-color-picker__saturation"
+              ref={saturationRef}
               style={{ backgroundColor: hueColor }}
               onMouseDown={handleMouseDown('saturation')}
             >
@@ -327,8 +370,9 @@ export default function ThemeColorPicker({ value, onChange, placeholder }) {
 
             {/* Hue slider */}
             <div className="theme-color-picker__sliders">
-              <div 
+              <div
                 className="theme-color-picker__hue"
+                ref={hueRef}
                 onMouseDown={handleMouseDown('hue')}
               >
                 <div 
@@ -338,8 +382,9 @@ export default function ThemeColorPicker({ value, onChange, placeholder }) {
               </div>
 
               {/* Alpha slider */}
-              <div 
+              <div
                 className="theme-color-picker__alpha"
+                ref={alphaRef}
                 onMouseDown={handleMouseDown('alpha')}
               >
                 <div 
